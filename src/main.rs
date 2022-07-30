@@ -1,7 +1,10 @@
+use color_eyre::eyre::{eyre, WrapErr, Result};
 use std::time::Duration;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
+    color_eyre::install()?;
+
     let mut handles = Vec::new();
 
     for i in 0..3 {
@@ -11,9 +14,14 @@ async fn main() {
         handles.push(handle);
     }
 
+    
+
+
     for handle in handles {
-        handle.await.expect("Error retrieving task.");
+        handle.await.wrap_err_with(|| format!("Failed to gather task"))?;
     }
+
+    Ok(())
 }
 
 async fn task(i: u64) {

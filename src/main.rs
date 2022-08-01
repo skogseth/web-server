@@ -9,14 +9,13 @@ type GenericError = Box<dyn Error + Send + Sync>;
 type GenericResult<T> = Result<T, GenericError>;
 
 
-//static INDEX: &[u8] = b"<a href=\"test.html\">test.html</a>";
+static INDEX: &[u8] = b"<a href=\"hello.html\">hello.html</a>";
 static NOTFOUND: &[u8] = b"Not Found";
 
 async fn handle_request(req: Request<Body>) -> GenericResult<Response<Body>> {
     match (req.method(), req.uri().path()) {
-        //(&Method::GET, "/") | (&Method::GET, "/index.html") => Ok(Response::new(INDEX.into())),
-        //(&Method::GET, "/test.html") => client_request_response().await,
-        (&Method::GET, "/") => Ok(Response::new("Hello Internet!".into())),
+        (&Method::GET, "/") | (&Method::GET, "/index.html") => Ok(Response::new(INDEX.into())),
+        (&Method::GET, "/hello.html") => Ok(Response::new("Hello Internet!".into())),
         _ => {
             // Return 404 not found response.
             Ok(Response::builder()
@@ -25,13 +24,6 @@ async fn handle_request(req: Request<Body>) -> GenericResult<Response<Body>> {
                 .unwrap())
         }
     }
-}
-
-async fn shutdown_signal() {
-    // Wait for the CTRL+C signal
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to install CTRL+C signal handler");
 }
 
 #[tokio::main]
@@ -44,9 +36,13 @@ async fn main() -> GenericResult<()> {
         Ok::<_, Infallible>(hyper::service::service_fn(move |req| handle_request(req)))
     });
 
+    let signal = || async { 
+        tokio::signal::ctrl_c().await.expect("failed to install CTRL+C signal handler")
+    };
+
     let server = Server::bind(&addr)
         .serve(service)
-        .with_graceful_shutdown(shutdown_signal());
+        .with_graceful_shutdown(signal());
 
     println!("Listening on http://{}", addr);
 

@@ -1,31 +1,58 @@
-use color_eyre::eyre::{eyre, WrapErr, Result};
-use std::time::Duration;
+use std::convert::Infallible;
+use std::error::Error;
+use std::net::SocketAddr;
+use std::result::Result;
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    color_eyre::install()?;
 
-    let mut handles = Vec::new();
+type GenericError = Box<dyn Error + Send + Sync>;
+type GenericResult<T> = Result<T, GenericError>;
 
-    for i in 0..3 {
-        let handle = tokio::spawn(async move {
-            task(i).await;
-        });
-        handles.push(handle);
+
+//static INDEX: &[u8] = b"<a href=\"test.html\">test.html</a>";
+static NOTFOUND: &[u8] = b"Not Found";
+
+async fn handle_request(req: Request<Body>) -> GenericResult<Response<Body>> {
+    match (req.method(), req.uri().path()) {
+        //(&Method::GET, "/") | (&Method::GET, "/index.html") => Ok(Response::new(INDEX.into())),
+        //(&Method::GET, "/test.html") => client_request_response().await,
+        (&Method::GET, "/") => Ok(Response::new("Hello Internet!".into())),
+        _ => {
+            // Return 404 not found response.
+            Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(NOTFOUND.into())
+                .unwrap())
+        }
     }
-
-    
-
-
-    for handle in handles {
-        handle.await.wrap_err_with(|| format!("Failed to gather task"))?;
-    }
-
-    Ok(())
 }
 
-async fn task(i: u64) {
-    println!("Hello from task {i}, beginning computation...");
-    tokio::time::sleep(Duration::from_secs(i)).await;
-    println!("Task {i} signing off.");
+async fn shutdown_signal() {
+    // Wait for the CTRL+C signal
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to install CTRL+C signal handler");
+}
+
+#[tokio::main]
+async fn main() -> GenericResult<()> {
+    const HOST: [u8; 4] = [127, 0, 0, 1];
+    const PORT: u16 = 7878;
+    let addr = SocketAddr::from((HOST, PORT));
+    
+    let service = hyper::service::make_service_fn(|_socket| async {
+        Ok::<_, Infallible>(hyper::service::service_fn(move |req| handle_request(req)))
+    });
+
+    let server = Server::bind(&addr)
+        .serve(service)
+        .with_graceful_shutdown(shutdown_signal());
+
+    println!("Listening on http://{}", addr);
+
+    server.await?;
+
+    println!("\nServer shutdown succesful!");
+
+    Ok(())
 }
